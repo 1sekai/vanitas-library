@@ -1,7 +1,7 @@
 -- =================================================================
--- VLib 2.0
+-- VLib 3.0
 -- Dibuat oleh AI (Gemini) untuk Vanitas
--- Fitur: Kategori di kiri, support PC + Mobile, ringan.
+-- Fitur: Kategori kiri, Minimize, Smooth Tweens, UICorner
 -- =================================================================
 
 local VLib = {}
@@ -9,11 +9,18 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 
+-- Preset Animasi
+local TWEEN_INFO = TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+
 -- Fungsi untuk membuat GUI utama
 function VLib:CreateWindow(options)
     local title = options.Name or "VLib Window"
     local hotkey = options.Hotkey or Enum.KeyCode.RightShift
     local defaultTabName = nil
+    
+    -- Status Jendela
+    local isVisible = true
+    local isMinimized = false
     
     -- Objek Window yang akan kita kembalikan
     local Window = {}
@@ -25,32 +32,35 @@ function VLib:CreateWindow(options)
     ScreenGui.Name = "VLib_ScreenGui"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.DisplayOrder = 999
-    Window.ScreenGui = ScreenGui -- Simpan referensi
+    Window.ScreenGui = ScreenGui 
 
     -- 2. MAIN FRAME (Jendela Utama)
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Parent = ScreenGui
     MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    MainFrame.Size = UDim2.new(0, 500, 0, 350) -- Ukuran PC
+    local fullSize = UDim2.new(0, 500, 0, 350)
+    local minimizedSize = UDim2.new(0, 200, 0, 30) -- Ukuran saat minimize
+    MainFrame.Size = fullSize
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
     MainFrame.BorderColor3 = Color3.fromRGB(50, 50, 55)
     MainFrame.BorderSizePixel = 1
-    MainFrame.Visible = true
+    MainFrame.ClipsDescendants = true -- Penting untuk animasi minimize
+    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 
-    -- 3. TOP BAR (Hanya untuk Judul dan Tombol Close)
+    -- 3. TOP BAR (Judul, Minimize, Close)
     local TopBar = Instance.new("Frame")
     TopBar.Name = "TopBar"
     TopBar.Parent = MainFrame
     TopBar.Size = UDim2.new(1, 0, 0, 30)
     TopBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
     TopBar.BorderSizePixel = 0
-
+    
     local TitleLabel = Instance.new("TextLabel")
     TitleLabel.Name = "Title"
     TitleLabel.Parent = TopBar
-    TitleLabel.Size = UDim2.new(1, -30, 1, 0) -- Sisakan ruang untuk tombol close
+    TitleLabel.Size = UDim2.new(1, -60, 1, 0) -- Sisakan ruang untuk 2 tombol
     TitleLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
     TitleLabel.BorderSizePixel = 0
     TitleLabel.Font = Enum.Font.SourceSansBold
@@ -60,18 +70,31 @@ function VLib:CreateWindow(options)
     TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
     TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 
-    -- Tombol Close/Toggle
-    local ToggleButton = Instance.new("TextButton")
-    ToggleButton.Name = "Toggle"
-    ToggleButton.Parent = TopBar
-    ToggleButton.Size = UDim2.new(0, 30, 1, 0)
-    ToggleButton.Position = UDim2.new(1, -30, 0, 0)
-    ToggleButton.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
-    ToggleButton.BorderSizePixel = 0
-    ToggleButton.Font = Enum.Font.SourceSansBold
-    ToggleButton.Text = "X"
-    ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ToggleButton.TextSize = 16
+    -- Tombol Close (Toggle)
+    local CloseButton = Instance.new("TextButton")
+    CloseButton.Name = "Close"
+    CloseButton.Parent = TopBar
+    CloseButton.Size = UDim2.new(0, 30, 1, 0)
+    CloseButton.Position = UDim2.new(1, -30, 0, 0)
+    CloseButton.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    CloseButton.BorderSizePixel = 0
+    CloseButton.Font = Enum.Font.SourceSansBold
+    CloseButton.Text = "X"
+    CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CloseButton.TextSize = 16
+    
+    -- Tombol Minimize
+    local MinimizeButton = Instance.new("TextButton")
+    MinimizeButton.Name = "Minimize"
+    MinimizeButton.Parent = TopBar
+    MinimizeButton.Size = UDim2.new(0, 30, 1, 0)
+    MinimizeButton.Position = UDim2.new(1, -60, 0, 0)
+    MinimizeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+    MinimizeButton.BorderSizePixel = 0
+    MinimizeButton.Font = Enum.Font.SourceSansBold
+    MinimizeButton.Text = "–" -- Karakter minus
+    MinimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MinimizeButton.TextSize = 20 -- Sedikit lebih besar agar terlihat
 
     -- 4. CONTAINER UTAMA (Untuk Tab Kiri dan Konten Kanan)
     local MainContainer = Instance.new("Frame")
@@ -81,15 +104,17 @@ function VLib:CreateWindow(options)
     MainContainer.Position = UDim2.new(0, 0, 0, 30)
     MainContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
     MainContainer.BorderSizePixel = 0
+    MainContainer.ClipsDescendants = true
 
     -- 5. TAB BAR (Sidebar Kiri)
     local TabBar = Instance.new("ScrollingFrame")
     TabBar.Name = "TabBar"
     TabBar.Parent = MainContainer
-    TabBar.Size = UDim2.new(0, 120, 1, 0) -- Lebar 120 piksel
+    TabBar.Size = UDim2.new(0, 120, 1, 0)
     TabBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
     TabBar.BorderSizePixel = 0
     TabBar.ScrollBarThickness = 3
+    Instance.new("UIPadding", TabBar).PaddingTop = UDim.new(0, 5)
 
     local TabListLayout = Instance.new("UIListLayout")
     TabListLayout.Parent = TabBar
@@ -101,7 +126,7 @@ function VLib:CreateWindow(options)
     local ContentFrame = Instance.new("Frame")
     ContentFrame.Name = "ContentFrame"
     ContentFrame.Parent = MainContainer
-    ContentFrame.Size = UDim2.new(1, -120, 1, 0) -- Penuhi sisa ruang
+    ContentFrame.Size = UDim2.new(1, -120, 1, 0)
     ContentFrame.Position = UDim2.new(0, 120, 0, 0)
     ContentFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
     ContentFrame.BorderSizePixel = 0
@@ -120,23 +145,46 @@ function VLib:CreateWindow(options)
     local function CheckDevice()
         if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
             -- Ini adalah Mobile
-            MainFrame.Size = UDim2.new(0.9, 0, 0.7, 0) -- Buat lebih besar
+            fullSize = UDim2.new(0.9, 0, 0.7, 0)
+            minimizedSize = UDim2.new(0.6, 0, 0, 30)
+            MainFrame.Size = fullSize
             MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
             TabBar.Size = UDim2.new(0, 100, 1, 0) -- Tab lebih kecil
             ContentFrame.Size = UDim2.new(1, -100, 1, 0)
             ContentFrame.Position = UDim2.new(0, 100, 0, 0)
         end
     end
-    CheckDevice() -- Jalankan saat inisialisasi
+    CheckDevice() 
 
-    -- Fungsi Toggle (Sembunyikan/Tampilkan)
-    local isVisible = true
+    -- Fungsi Toggle (Sembunyikan/Tampilkan) - Tombol 'X'
     local function ToggleUI()
         isVisible = not isVisible
         MainFrame.Visible = isVisible
+        -- Jika Anda ingin animasi fade, ini akan jauh lebih rumit
+        -- Untuk mobile, Visible = true/false adalah yang paling ringan
     end
     
-    ToggleButton.MouseButton1Click:Connect(ToggleUI)
+    CloseButton.MouseButton1Click:Connect(ToggleUI)
+    
+    -- Fungsi Minimize - Tombol '–'
+    local function ToggleMinimize()
+        isMinimized = not isMinimized
+        if isMinimized then
+            -- Kecilkan
+            MainContainer.Visible = false
+            TitleLabel.Text = title -- Tampilkan judul penuh
+            TweenService:Create(MainFrame, TWEEN_INFO, {Size = minimizedSize, Position = UDim2.new(0.5, 0, 0.1, 0)}):Play()
+        else
+            -- Besarkan
+            MainContainer.Visible = true
+            TitleLabel.Text = title
+            TweenService:Create(MainFrame, TWEEN_INFO, {Size = fullSize, Position = UDim2.new(0.5, 0, 0.5, 0)}):Play()
+        end
+    end
+    
+    MinimizeButton.MouseButton1Click:Connect(ToggleMinimize)
+    
+    -- Hotkey
     UserInputService.InputBegan:Connect(function(input, processed)
         if processed then return end
         if input.KeyCode == hotkey then
@@ -149,17 +197,25 @@ function VLib:CreateWindow(options)
     function Window:CreateTab(tabName)
         local Tab = {}
         
+        -- Warna
+        local color_Active = Color3.fromRGB(50, 50, 55)
+        local color_Inactive = Color3.fromRGB(40, 40, 45)
+        local color_TextActive = Color3.fromRGB(255, 255, 255)
+        local color_TextInactive = Color3.fromRGB(200, 200, 200)
+
         -- Buat Tombol Tab di Sidebar Kiri
         local TabButton = Instance.new("TextButton")
         TabButton.Name = tabName
         TabButton.Parent = TabBar
-        TabButton.Size = UDim2.new(1, 0, 0, 40)
-        TabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+        TabButton.Size = UDim2.new(1, -10, 0, 40)
+        TabButton.Position = UDim2.new(0, 5, 0, 0)
+        TabButton.BackgroundColor3 = color_Inactive
         TabButton.BorderSizePixel = 0
         TabButton.Font = Enum.Font.SourceSans
         TabButton.Text = tabName
-        TabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        TabButton.TextColor3 = color_TextInactive
         TabButton.TextSize = 16
+        Instance.new("UICorner", TabButton).CornerRadius = UDim.new(0, 6)
         
         -- Buat Halaman Konten di Kanan
         local TabPage = Instance.new("ScrollingFrame")
@@ -171,6 +227,9 @@ function VLib:CreateWindow(options)
         TabPage.ScrollBarThickness = 3
         TabPage.AutomaticCanvasSize = Enum.AutomaticSize.Y
         TabPage.CanvasSize = UDim2.new(0, 0, 0, 0)
+        Instance.new("UIPadding", TabPage).PaddingLeft = UDim.new(0, 10)
+        Instance.new("UIPadding", TabPage).PaddingRight = UDim.new(0, 10)
+        Instance.new("UIPadding", TabPage).PaddingTop = UDim.new(0, 10)
         
         local PageListLayout = Instance.new("UIListLayout")
         PageListLayout.Parent = TabPage
@@ -187,22 +246,20 @@ function VLib:CreateWindow(options)
         if not defaultTabName then
             defaultTabName = tabName
             Window.CurrentTab = Tab
-            TabButton.BackgroundColor3 = Color3.fromRGB(50, 50, 55) -- Warna aktif
-            TabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            TabButton.BackgroundColor3 = color_Active
+            TabButton.TextColor3 = color_TextActive
             PageLayout:JumpTo(TabPage)
         end
         
         -- Fungsi Klik Tab
         TabButton.MouseButton1Click:Connect(function()
-            if Window.CurrentTab == Tab then return end -- Jangan lakukan apa-apa jika tab sudah aktif
+            if Window.CurrentTab == Tab then return end
             
-            -- Reset warna tab lama
-            Window.CurrentTab.Button.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
-            Window.CurrentTab.Button.TextColor3 = Color3.fromRGB(200, 200, 200)
+            -- Reset tab lama (dengan tween)
+            TweenService:Create(Window.CurrentTab.Button, TWEEN_INFO, {BackgroundColor3 = color_Inactive, TextColor3 = color_TextInactive}):Play()
             
-            -- Atur warna tab baru
-            TabButton.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-            TabButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+            -- Atur tab baru (dengan tween)
+            TweenService:Create(TabButton, TWEEN_INFO, {BackgroundColor3 = color_Active, TextColor3 = color_TextActive}):Play()
             
             -- Ganti Halaman
             PageLayout:JumpTo(TabPage)
@@ -215,20 +272,30 @@ function VLib:CreateWindow(options)
             local btnName = btnOptions.Name or "Button"
             local btnCallback = btnOptions.Callback or function() print(btnName .. " Ditekan") end
             
+            local color_Base = Color3.fromRGB(50, 50, 55)
+            local color_Hover = Color3.fromRGB(70, 70, 75)
+            
             local Button = Instance.new("TextButton")
             Button.Name = btnName
-            Button.Parent = TabPage -- Tambahkan ke Halaman, BUKAN ke TabBar
-            Button.Size = UDim2.new(1, -10, 0, 35) -- Lebar penuh dikurangi padding
-            Button.Position = UDim2.new(0, 5, 0, 0) -- Posisi diatur ListLayout
-            Button.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-            Button.BorderColor3 = Color3.fromRGB(80, 80, 80)
-            Button.BorderSizePixel = 1
+            Button.Parent = TabPage
+            Button.Size = UDim2.new(1, 0, 0, 35)
+            Button.BackgroundColor3 = color_Base
             Button.Font = Enum.Font.SourceSans
             Button.Text = btnName
             Button.TextColor3 = Color3.fromRGB(255, 255, 255)
             Button.TextSize = 16
+            Instance.new("UICorner", Button).CornerRadius = UDim.new(0, 6)
             
             Button.MouseButton1Click:Connect(btnCallback)
+            
+            -- Hover Effects
+            Button.MouseEnter:Connect(function()
+                TweenService:Create(Button, TWEEN_INFO, {BackgroundColor3 = color_Hover}):Play()
+            end)
+            Button.MouseLeave:Connect(function()
+                TweenService:Create(Button, TWEEN_INFO, {BackgroundColor3 = color_Base}):Play()
+            end)
+            
             return Button
         end
 
@@ -239,19 +306,21 @@ function VLib:CreateWindow(options)
             
             local isEnabled = tglDefault
             
-            local ToggleFrame = Instance.new("Frame")
+            local color_On = Color3.fromRGB(70, 150, 70)
+            local color_Off = Color3.fromRGB(150, 70, 70)
+            
+            local ToggleFrame = Instance.new("TextButton") -- Ganti ke TextButton agar bisa diklik
             ToggleFrame.Name = tglName .. "_Frame"
             ToggleFrame.Parent = TabPage
-            ToggleFrame.Size = UDim2.new(1, -10, 0, 35)
-            ToggleFrame.Position = UDim2.new(0, 5, 0, 0)
+            ToggleFrame.Size = UDim2.new(1, 0, 0, 35)
             ToggleFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-            ToggleFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
-            ToggleFrame.BorderSizePixel = 1
+            ToggleFrame.Text = "" -- Hapus teks, hanya untuk klik
+            Instance.new("UICorner", ToggleFrame).CornerRadius = UDim.new(0, 6)
             
             local Label = Instance.new("TextLabel")
             Label.Parent = ToggleFrame
-            Label.Size = UDim2.new(1, -50, 1, 0) -- Sisakan ruang untuk tombol switch
-            Label.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+            Label.Size = UDim2.new(1, -50, 1, 0)
+            Label.BackgroundTransparency = 1
             Label.BorderSizePixel = 0
             Label.Font = Enum.Font.SourceSans
             Label.Text = tglName
@@ -262,33 +331,33 @@ function VLib:CreateWindow(options)
             
             local Switch = Instance.new("TextButton")
             Switch.Parent = ToggleFrame
-            Switch.Size = UDim2.new(0, 40, 0, 25) -- Switch kecil di kanan
-            Switch.Position = UDim2.new(1, -45, 0.5, -12.5) -- Posisikan di kanan tengah
+            Switch.Size = UDim2.new(0, 40, 0, 25)
+            Switch.Position = UDim2.new(1, -45, 0.5, -12.5)
             Switch.Font = Enum.Font.SourceSansBold
             Switch.TextSize = 14
+            Switch.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Instance.new("UICorner", Switch).CornerRadius = UDim.new(0, 4)
             
             local function updateVisuals()
                 if isEnabled then
                     Switch.Text = "ON"
-                    Switch.BackgroundColor3 = Color3.fromRGB(70, 150, 70) -- Hijau
+                    TweenService:Create(Switch, TWEEN_INFO, {BackgroundColor3 = color_On}):Play()
                 else
                     Switch.Text = "OFF"
-                    Switch.BackgroundColor3 = Color3.fromRGB(150, 70, 70) -- Merah
+                    TweenService:Create(Switch, TWEEN_INFO, {BackgroundColor3 = color_Off}):Play()
                 end
             end
             
-            updateVisuals() -- Atur tampilan awal
+            updateVisuals()
             
-            ToggleFrame.MouseButton1Click:Connect(function()
+            local function onToggle()
                 isEnabled = not isEnabled
                 updateVisuals()
-                pcall(tglCallback, isEnabled) -- Panggil callback
-            end)
-            Switch.MouseButton1Click:Connect(function()
-                isEnabled = not isEnabled
-                updateVisuals()
-                pcall(tglCallback, isEnabled) -- Panggil callback
-            end)
+                pcall(tglCallback, isEnabled)
+            end
+            
+            ToggleFrame.MouseButton1Click:Connect(onToggle)
+            Switch.MouseButton1Click:Connect(onToggle)
             
             return ToggleFrame
         end
@@ -297,18 +366,16 @@ function VLib:CreateWindow(options)
             local Label = Instance.new("TextLabel")
             Label.Name = "Label"
             Label.Parent = TabPage
-            Label.Size = UDim2.new(1, -10, 0, 30)
-            Label.Position = UDim2.new(0, 5, 0, 0)
+            Label.Size = UDim2.new(1, 0, 0, 30)
             Label.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-            Label.BorderSizePixel = 0
             Label.Font = Enum.Font.SourceSansItalic
-            Label.Text = labelText
+            Label.Text = "  " .. labelText -- Tambah spasi
             Label.TextColor3 = Color3.fromRGB(200, 200, 200)
             Label.TextSize = 14
+            Label.TextXAlignment = Enum.TextXAlignment.Left
+            Instance.new("UICorner", Label).CornerRadius = UDim.new(0, 6)
             return Label
         end
-
-        -- Anda bisa menambahkan :CreateSlider, :CreateInput, dll. di sini
         
         return Tab
     end
