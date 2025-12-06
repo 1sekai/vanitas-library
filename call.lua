@@ -1,28 +1,33 @@
+local success, err = pcall(function()
+    local old_error = error
+    hookfunction(error, newcclosure(function(msg, level)
+        local msg_str = tostring(msg or "")
+        if msg_str:find("Tamper") or msg_str:find("Detected") or msg_str:find("integrity") then
+            warn("[BYPASS] Error '"..msg_str.."' berhasil dibungkam.")
+            return
+        end
+        return old_error(msg, level)
+    end))
 
-local env = getgenv and getgenv() or _G
-if setreadonly then 
-    setreadonly(env, false) 
-end
-
-local original_error = error
-
-env.error = function(msg, level)
-    local message = tostring(msg or "")
-    if message:find("Tamper") or message:find("Detected") or message:find("integrity") then
-        warn("[BYPASS] Error '"..message.."' berhasil diblokir!")
-        return
+    if debug and debug.getinfo then
+        local old_getinfo = debug.getinfo
+        hookfunction(debug.getinfo, newcclosure(function(...)
+            return {
+                what = "C", 
+                name = "pcall", 
+                source = "=[C]", 
+                short_src = "[C]",
+                func = function() end
+            }
+        end))
     end
-    return original_error(msg, level)
-end
+end)
 
-if debug and debug.getinfo then
-    env.debug.getinfo = function(...) 
-        return {what = "C", name = "pcall", source = "=[C]", short_src = "[C]"} 
-    end
+if not success then
+    warn("Gagal melakukan Hooking (Delta mungkin tidak support): " .. tostring(err))
+else
+    print("[-] Security Bypass: ACTIVE")
 end
-
-print("[-] Security System: OFF")
-print("[-] Readonly Lock: OFF")
 
 return (function(Q, s, E, L, w, l, F, y, m, X, S, U, H, D, B, r, d, v, x, h, C, T, A, j, P)
 	H, A, X, T, v, d, B, h, U, x, m, C, D, P, r, y, S, j = {}, 0, function(Q, O)
