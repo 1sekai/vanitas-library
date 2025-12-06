@@ -1,15 +1,28 @@
+
 local env = getgenv and getgenv() or _G
-local old_error = error
-env.error = function(msg, level)
-    if tostring(msg):find("Tamper") or tostring(msg):find("Detected") then return end
-    return old_error(msg, level)
-end
-if debug and debug.getinfo then
-    debug.getinfo = function(...) return {what = "C", name = "pcall"} end
+if setreadonly then 
+    setreadonly(env, false) 
 end
 
--- [DEOBFUSCATED BY FIXVANITAS V3]
--- Table: Q | Offset: 42168
+local original_error = error
+
+env.error = function(msg, level)
+    local message = tostring(msg or "")
+    if message:find("Tamper") or message:find("Detected") or message:find("integrity") then
+        warn("[BYPASS] Error '"..message.."' berhasil diblokir!")
+        return
+    end
+    return original_error(msg, level)
+end
+
+if debug and debug.getinfo then
+    env.debug.getinfo = function(...) 
+        return {what = "C", name = "pcall", source = "=[C]", short_src = "[C]"} 
+    end
+end
+
+print("[-] Security System: OFF")
+print("[-] Readonly Lock: OFF")
 
 return (function(Q, s, E, L, w, l, F, y, m, X, S, U, H, D, B, r, d, v, x, h, C, T, A, j, P)
 	H, A, X, T, v, d, B, h, U, x, m, C, D, P, r, y, S, j = {}, 0, function(Q, O)
